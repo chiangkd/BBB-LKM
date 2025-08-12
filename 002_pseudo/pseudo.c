@@ -2,16 +2,24 @@
 #include <linux/fs.h>
 #include <linux/cdev.h>
 #include <linux/device.h>
-#include <linux/version.h>
+#include <linux/kdev_t.h>
+
 
 #define MEM_SIZE 512
 #define PSEUDO_DEIVCE_NAME "pseudo"
+
+
+// Custumize print format
+#ifdef pr_fmt
+#undef pr_fmt
+#define pr_fmt(fmt) "%s: " fmt, __func__
+#endif
 
 char pseudo_device_buf[MEM_SIZE];   // pseudo device
 dev_t device_number;
 struct device *pseudo_device;
 struct cdev pseudo_cdev;
-
+struct class *pseudo_class;
 
 /* This is descriptive information about the module */
 MODULE_LICENSE("GPL");
@@ -21,22 +29,27 @@ MODULE_INFO(name, "string_value");
 
 static loff_t pseudo_lseek(struct file *file, loff_t offset, int orig)
 {
+	pr_info("lseek requested\n");
     return 0;
 }
 static ssize_t pseudo_read(struct file *file, char __user *buf, size_t size, loff_t *offset)
 {
+	pr_info("read requested for %zu bytes\n", size);
     return 0;
 }
 static ssize_t pseudo_write(struct file *file, const char __user *buf, size_t size, loff_t *offset)
 {
+	pr_info("write requested for %zu bytes\n", size);
     return 0;
 }
 static int pseudo_release(struct inode *inode, struct file *file)
 {
+	pr_info("release was successful\n");
     return 0;
 }
 static int pseudo_open(struct inode *inode, struct file *file)
 {
+	pr_info("open was successful\n");
     return 0;
 }
 
@@ -50,12 +63,13 @@ struct file_operations pseudo_fops = {
     .llseek = pseudo_lseek,
 };
 
-struct class *pseudo_class;
 
 static int __init pseudo_init(void)
 {
     // Dynamically allocate a device number
     alloc_chrdev_region(&device_number, 0, 1, PSEUDO_DEIVCE_NAME);
+
+	pr_info("Device number <major>:<minor> = %d:%d\n", MAJOR(device_number), MINOR(device_number));
 
     // Initialize the cdev structure with fops
     cdev_init(&pseudo_cdev, &pseudo_fops);
@@ -65,21 +79,23 @@ static int __init pseudo_init(void)
     cdev_add(&pseudo_cdev, device_number, 1);
 
     // Create device class under /sys/class
-// #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 4, 0)
     pseudo_class = class_create(THIS_MODULE, PSEUDO_DEIVCE_NAME);
-// #else
-//     pseudo_class = class_create(PSEUDO_DEIVCE_NAME);
-// #endif
 
     // Populate the sysfs with device information
     pseudo_device = device_create(pseudo_class, NULL, device_number, NULL, PSEUDO_DEIVCE_NAME);
+
+	pr_info("Module init was successful\n");
 
     return 0;
 }
 
 static void __exit pseudo_exit(void)
 {
-
+	device_destroy(pseudo_class, device_number);
+	class_destroy(pseudo_class);
+	cdev_del(&pseudo_cdev);
+	unregister_chrdev_region(device_number, 1);
+	pr_info("module unloaded\n");
 }
 
 module_init(pseudo_init);

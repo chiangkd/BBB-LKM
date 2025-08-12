@@ -1,4 +1,5 @@
-obj-m := main.o
+TARGET_MODULE := pseudo
+obj-m := $(TARGET_MODULE).o
 
 HEADER := 5.10.168-ti-r71
 
@@ -22,4 +23,4 @@ host:
 	$(MAKE) -C $(HOSTKDIR) M=$(PWD) modules
 
 upload:
-	scp main.ko debian@192.168.7.2:/home/debian/drivers
+	scp $(TARGET_MODULE).ko debian@192.168.7.2:/home/debian/drivers
