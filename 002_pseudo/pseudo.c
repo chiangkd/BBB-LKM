@@ -29,19 +29,95 @@ MODULE_INFO(name, "string_value");
 
 static loff_t pseudo_lseek(struct file *file, loff_t offset, int orig)
 {
+	loff_t new_pos = 0;
 	pr_info("lseek requested\n");
-    return 0;
+	pr_info("current file position = %lld\n", offset);
+
+	switch (orig)
+	{
+		case SEEK_SET:
+			new_pos = offset;
+			break;
+		case SEEK_CUR:
+			new_pos = file->f_pos + offset;
+			break;
+		case SEEK_END:
+			new_pos = MEM_SIZE - offset;
+			break;
+		default:
+			return -EINVAL;
+
+		if (new_pos > MEM_SIZE) {
+			new_pos = MEM_SIZE;
+		}
+
+		if (new_pos < 0) {
+			new_pos = 0;
+		}
+
+		file->f_pos = new_pos;
+	}
+
+	return new_pos;
 }
 static ssize_t pseudo_read(struct file *file, char __user *buf, size_t size, loff_t *offset)
 {
 	pr_info("read requested for %zu bytes\n", size);
-    return 0;
+	pr_info("current file position = %lld\n", *offset);
+
+	// Adjust the 'size'
+	if ((*offset + size) > MEM_SIZE) {
+		size = MEM_SIZE - *offset;
+	}
+
+	// Copy to user
+
+	/**
+	 Global data access should be serialized using mutual exclusion locks
+	 to avoid race condition.
+	*/	
+	if (copy_to_user(buf, &pseudo_device_buf[*offset], size)) {
+		return -EFAULT;
+	};
+
+	// Update the current file position
+	*offset += size;
+
+	pr_info("Number of bytes successfully read = %zu\n", size);
+	pr_info("Updated file position = %lld\n", *offset);
+
+	// Return number of bytes which have been successfully read
+    return size;
 }
+
 static ssize_t pseudo_write(struct file *file, const char __user *buf, size_t size, loff_t *offset)
 {
 	pr_info("write requested for %zu bytes\n", size);
-    return 0;
+	pr_info("current file position = %lld\n", *offset);
+
+	// Adjust the 'size'
+	if ((*offset + size) > MEM_SIZE) {
+		size = MEM_SIZE - *offset;
+	}
+
+	if (size == 0) {
+		return -ENOMEM;
+	}
+
+	// Copy from user
+	if (copy_from_user(&pseudo_device_buf[*offset], buf, size)) {
+		return -EFAULT;
+	};
+
+	// Update the current file position
+	*offset += size;
+
+	pr_info("Number of bytes successfully writen = %zu\n", size);
+	pr_info("Updated file position = %lld\n", *offset);
+
+	return size;
 }
+
 static int pseudo_release(struct inode *inode, struct file *file)
 {
 	pr_info("release was successful\n");
