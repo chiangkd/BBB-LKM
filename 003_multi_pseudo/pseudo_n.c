@@ -23,7 +23,7 @@ struct pseudo_dev_private_data {
 	const char *serial_number;
 	int perm;
 	struct cdev pseudo_cdev;
-}
+};
 
 // Driver private data structure
 struct pseudo_drv_private_data {
@@ -31,12 +31,12 @@ struct pseudo_drv_private_data {
 	dev_t device_number;		// This holds the device number
 	struct device *pseudo_device;
 	struct class *pseudo_class;
-	struct pseudo_dev_private_data[NO_OF_DEVICES];
+	struct pseudo_dev_private_data pseudo_dev_data[NO_OF_DEVICES];
 };
 
 struct pseudo_drv_private_data pseudo_drv_data = {
 	.total_devices = NO_OF_DEVICES,
-	.pseudo_dev_private_data = {
+	.pseudo_dev_data = {
 		[0] = {
 			.buffer = pseudo_device_buf1,
 			.size = MEM_SIZE_DEV1,
@@ -195,63 +195,75 @@ struct file_operations pseudo_fops = {
 static int __init pseudo_init(void)
 {
 	int rc = 0;
+	int i = 0;
 
     // Dynamically allocate a device number
-    rc = alloc_chrdev_region(&device_number, 0, 1, PSEUDO_DEIVCE_NAME);
+    rc = alloc_chrdev_region(&pseudo_drv_data.device_number, 0, NO_OF_DEVICES, PSEUDO_DEIVCE_NAME);
 
 	if (rc < 0) {
 		pr_err("alloc_chrdev_region fail\n");
 		goto alloc_cdev_fail;
 	}
 
-	pr_info("Device number <major>:<minor> = %d:%d\n", MAJOR(device_number), MINOR(device_number));
-
-    // Initialize the cdev structure with fops
-	cdev_init(&pseudo_cdev, &pseudo_fops);
-
-    // Register a device (cdev structure) with VFS
-    pseudo_cdev.owner = THIS_MODULE;
-	rc = cdev_add(&pseudo_cdev, device_number, 1);
-	if (rc < 0) {
-		pr_err("cdev_add fail\n");
+	// Create device class under /sys/class
+	pseudo_drv_data.pseudo_class = class_create(THIS_MODULE, PSEUDO_DEIVCE_NAME);
+	if (IS_ERR(pseudo_drv_data.pseudo_class)) {
+		pr_err("class_create fail\n");
+		rc = PTR_ERR(pseudo_drv_data.pseudo_class);
 		goto unreg_cdev;
 	}
-    // Create device class under /sys/class
-    pseudo_class = class_create(THIS_MODULE, PSEUDO_DEIVCE_NAME);
-	if (IS_ERR(pseudo_class)) {
-		pr_err("class_create fail\n");
-		rc = PTR_ERR(pseudo_class);
-		goto cdev_del;
-	}
 
-    // Populate the sysfs with device information
-    pseudo_device = device_create(pseudo_class, NULL, device_number, NULL, PSEUDO_DEIVCE_NAME);
-	if (IS_ERR(pseudo_device)) {
-		pr_err("device_create fail\n");
-		rc = PTR_ERR(pseudo_device);
-		goto class_del;
+	for (i = 0; i < NO_OF_DEVICES; i++) {
+		pr_info("Device number <major>:<minor> = %d:%d\n", MAJOR(pseudo_drv_data.device_number + i), MINOR(pseudo_drv_data.device_number + i));
+
+		// Initialize the cdev structure with fops
+		cdev_init(&pseudo_drv_data.pseudo_dev_data[i].pseudo_cdev, &pseudo_fops);
+
+		// Register a device (cdev structure) with VFS
+		pseudo_drv_data.pseudo_dev_data[i].pseudo_cdev.owner = THIS_MODULE;
+		rc = cdev_add(&pseudo_drv_data.pseudo_dev_data[i].pseudo_cdev, pseudo_drv_data.device_number + i, 1);
+		if (rc < 0) {
+			pr_err("cdev_add fail\n");
+			goto cleanup_cdev;
+		}
+
+
+		// Populate the sysfs with device information
+		pseudo_drv_data.pseudo_device = device_create(pseudo_drv_data.pseudo_class, NULL, pseudo_drv_data.device_number, NULL, "%s%d", PSEUDO_DEIVCE_NAME, i);
+		if (IS_ERR(pseudo_drv_data.pseudo_device)) {
+			pr_err("device_create fail\n");
+			rc = PTR_ERR(pseudo_drv_data.pseudo_device);
+			goto cleanup_cdev;
+		}
+
 	}
 
 	pr_info("Module init was successful\n");
 
     return rc;
 
-class_del:
-	class_destroy(pseudo_class);
-cdev_del:
-	cdev_del(&pseudo_cdev);
+cleanup_cdev:
+	/** Clean the devices/cdev which has already create */
+	while (--i >= 0) {
+		device_destroy(pseudo_drv_data.pseudo_class, pseudo_drv_data.device_number + 1);
+		cdev_del(&pseudo_drv_data.pseudo_dev_data[i].pseudo_cdev);
+	}
+	class_destroy(pseudo_drv_data.pseudo_class);
 unreg_cdev:
-	unregister_chrdev_region(device_number, 1);
+	unregister_chrdev_region(pseudo_drv_data.device_number, NO_OF_DEVICES);
 alloc_cdev_fail:
 	return rc;
 }
 
 static void __exit pseudo_exit(void)
 {
-	device_destroy(pseudo_class, device_number);
-	class_destroy(pseudo_class);
-	cdev_del(&pseudo_cdev);
-	unregister_chrdev_region(device_number, 1);
+	int i = 0;
+	for (i = 0; i < NO_OF_DEVICES; i++) {
+		device_destroy(pseudo_drv_data.pseudo_class, pseudo_drv_data.device_number + 1);
+		cdev_del(&pseudo_drv_data.pseudo_dev_data[i].pseudo_cdev);
+	}
+	class_destroy(pseudo_drv_data.pseudo_class);
+	unregister_chrdev_region(pseudo_drv_data.device_number, NO_OF_DEVICES);
 	pr_info("module unloaded\n");
 }
 
