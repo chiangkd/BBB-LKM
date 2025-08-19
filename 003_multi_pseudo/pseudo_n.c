@@ -11,6 +11,10 @@
 #define MEM_SIZE_DEV3 1024
 #define MEM_SIZE_DEV4 512
 
+#define RDONLY 	0x01
+#define WRONLY 	0x10
+#define RDWR	0x11
+
 char pseudo_device_buf1[MEM_SIZE_DEV1];   // pseudo device
 char pseudo_device_buf2[MEM_SIZE_DEV2];   // pseudo device
 char pseudo_device_buf3[MEM_SIZE_DEV3];   // pseudo device
@@ -41,25 +45,25 @@ struct pseudo_drv_private_data pseudo_drv_data = {
 			.buffer = pseudo_device_buf1,
 			.size = MEM_SIZE_DEV1,
 			.serial_number = "PSEUDODEV1",
-			.perm = 0x1		/* RDONLY */
+			.perm = RDONLY	/* RDONLY */
 		},
 		[1] = {
 			.buffer = pseudo_device_buf2,
 			.size = MEM_SIZE_DEV2,
 			.serial_number = "PSEUDODEV2",
-			.perm = 0x10	/* WRONLY */
+			.perm = WRONLY	/* WRONLY */
 		},
 		[2] = {
 			.buffer = pseudo_device_buf3,
 			.size = MEM_SIZE_DEV3,
 			.serial_number = "PSEUDODEV3",
-			.perm = 0x11	/* RDWR */
+			.perm = RDWR	/* RDWR */
 		},
 		[3] = {
 			.buffer = pseudo_device_buf4,
 			.size = MEM_SIZE_DEV4,
 			.serial_number = "PSEUDODEV4",
-			.perm = 0x11	/* RDWR */
+			.perm = RDWR	/* RDWR */
 		},
 	}
 };
@@ -83,9 +87,12 @@ MODULE_INFO(name, "string_value");
 
 static loff_t pseudo_lseek(struct file *file, loff_t offset, int orig)
 {
+	struct pseudo_dev_private_data *pseudo_dev_data = (struct pseudo_dev_private_data *)file->private_data;
+	int max_size = pseudo_dev_data->size;
+
 	loff_t new_pos = 0;
 	pr_info("lseek requested\n");
-	pr_info("current file position = %lld\n", offset);
+	pr_info("current file position = %lld\n", file->f_pos);
 
 	switch (orig)
 	{
@@ -96,12 +103,12 @@ static loff_t pseudo_lseek(struct file *file, loff_t offset, int orig)
 			new_pos = file->f_pos + offset;
 			break;
 		case SEEK_END:
-			new_pos = MEM_SIZE - offset;
+			new_pos = max_size - offset;
 			break;
 		default:
 			return -EINVAL;
-		if (new_pos > MEM_SIZE) {
-			new_pos = MEM_SIZE;
+		if (new_pos > max_size) {
+			new_pos = max_size;
 		}
 		if (new_pos < 0) {
 			new_pos = 0;
@@ -113,12 +120,15 @@ static loff_t pseudo_lseek(struct file *file, loff_t offset, int orig)
 
 static ssize_t pseudo_read(struct file *file, char __user *buf, size_t size, loff_t *offset)
 {
+	struct pseudo_dev_private_data *pseudo_dev_data = (struct pseudo_dev_private_data *)file->private_data;
+	int max_size = pseudo_dev_data->size;
+
 	pr_info("read requested for %zu bytes\n", size);
 	pr_info("current file position = %lld\n", *offset);
 
 	// Adjust the 'size'
-	if ((*offset + size) > MEM_SIZE) {
-		size = MEM_SIZE - *offset;
+	if ((*offset + size) > max_size) {
+		size = max_size - *offset;
 	}
 
 	// Copy to user
@@ -127,7 +137,7 @@ static ssize_t pseudo_read(struct file *file, char __user *buf, size_t size, lof
 	 Global data access should be serialized using mutual exclusion locks
 	 to avoid race condition.
 	*/	
-	if (copy_to_user(buf, &pseudo_device_buf[*offset], size)) {
+	if (copy_to_user(buf, &pseudo_dev_data->buffer + (*offset), size)) {
 		return -EFAULT;
 	};
 
@@ -143,12 +153,15 @@ static ssize_t pseudo_read(struct file *file, char __user *buf, size_t size, lof
 
 static ssize_t pseudo_write(struct file *file, const char __user *buf, size_t size, loff_t *offset)
 {
+	struct pseudo_dev_private_data *pseudo_dev_data = (struct pseudo_dev_private_data *)file->private_data;
+	int max_size = pseudo_dev_data->size;
+
 	pr_info("write requested for %zu bytes\n", size);
 	pr_info("current file position = %lld\n", *offset);
 
 	// Adjust the 'size'
-	if ((*offset + size) > MEM_SIZE) {
-		size = MEM_SIZE - *offset;
+	if ((*offset + size) > max_size) {
+		size = max_size - *offset;
 	}
 
 	if (size == 0) {
@@ -157,7 +170,7 @@ static ssize_t pseudo_write(struct file *file, const char __user *buf, size_t si
 	}
 
 	// Copy from user
-	if (copy_from_user(&pseudo_device_buf[*offset], buf, size)) {
+	if (copy_from_user(&pseudo_dev_data->buffer + (*offset), buf, size)) {
 		return -EFAULT;
 	};
 
@@ -175,10 +188,45 @@ static int pseudo_release(struct inode *inode, struct file *file)
 	pr_info("release was successful\n");
     return 0;
 }
+
+
+int check_permission(int perm, int acc_mode)
+{
+	if (perm == RDWR)
+		return 0;
+
+	if ((perm == RDONLY) && ((acc_mode & FMODE_READ) && !(acc_mode & FMODE_WRITE)))
+		return 0;
+
+	if ((perm == WRONLY) && (!(acc_mode & FMODE_READ) && (acc_mode & FMODE_WRITE)))
+		return 0;
+	
+	return -EPERM;
+}
+
 static int pseudo_open(struct inode *inode, struct file *file)
 {
-	pr_info("open was successful\n");
-    return 0;
+	int rc;
+	int minor_n;
+	struct pseudo_dev_private_data *pseudo_dev_data;
+	/** Find out on which device file open was attempted by the user space */
+	minor_n = MINOR(inode->i_rdev);
+	pr_info("minor access = %d\n", minor_n);
+	/** Get device's private data structure  */
+	pseudo_dev_data = container_of(inode->i_cdev, struct pseudo_dev_private_data, pseudo_cdev);
+	
+	/** To supply device private data to other methods of the driver */
+	file->private_data = pseudo_dev_data;
+
+	/** Check permission */
+	rc = check_permission(pseudo_dev_data->perm, file->f_mode);
+
+	if (!rc)
+		pr_info("open was successful\n");
+    else
+		pr_info("open was fail\n");
+
+	return rc;
 }
 
 // File operations of the driver
@@ -229,7 +277,7 @@ static int __init pseudo_init(void)
 
 
 		// Populate the sysfs with device information
-		pseudo_drv_data.pseudo_device = device_create(pseudo_drv_data.pseudo_class, NULL, pseudo_drv_data.device_number, NULL, "%s%d", PSEUDO_DEIVCE_NAME, i);
+		pseudo_drv_data.pseudo_device = device_create(pseudo_drv_data.pseudo_class, NULL, pseudo_drv_data.device_number + i, NULL, "%s%d", PSEUDO_DEIVCE_NAME, i);
 		if (IS_ERR(pseudo_drv_data.pseudo_device)) {
 			pr_err("device_create fail\n");
 			rc = PTR_ERR(pseudo_drv_data.pseudo_device);
