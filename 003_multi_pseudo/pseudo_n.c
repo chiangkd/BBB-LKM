@@ -103,18 +103,21 @@ static loff_t pseudo_lseek(struct file *file, loff_t offset, int orig)
 			new_pos = file->f_pos + offset;
 			break;
 		case SEEK_END:
-			new_pos = max_size - offset;
+			new_pos = max_size + offset;
 			break;
 		default:
 			return -EINVAL;
-		if (new_pos > max_size) {
-			new_pos = max_size;
-		}
-		if (new_pos < 0) {
-			new_pos = 0;
-		}
-		file->f_pos = new_pos;
 	}
+	if (new_pos > max_size) {
+		new_pos = max_size;
+	}
+	if (new_pos < 0) {
+		new_pos = 0;
+	}
+	file->f_pos = new_pos;
+	
+	pr_info("new file position = %lld\n", file->f_pos);
+
 	return new_pos;
 }
 

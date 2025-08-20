@@ -45,9 +45,9 @@ int main (int argc, char *argv[])
 	}
 	printf("open was successful\n");
 
-#if  0 
+#if 1
 	/*activate this for lseek testing */
-	ret = lseek(fd,-10,SEEK_SET);
+	ret = lseek(fd, 10, SEEK_SET);
 	if(ret < 0){
 		perror("lseek");
 		close(fd);
