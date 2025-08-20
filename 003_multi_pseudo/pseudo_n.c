@@ -137,7 +137,7 @@ static ssize_t pseudo_read(struct file *file, char __user *buf, size_t size, lof
 	 Global data access should be serialized using mutual exclusion locks
 	 to avoid race condition.
 	*/	
-	if (copy_to_user(buf, &pseudo_dev_data->buffer + (*offset), size)) {
+	if (copy_to_user(buf, pseudo_dev_data->buffer + (*offset), size)) {
 		return -EFAULT;
 	};
 
@@ -170,7 +170,7 @@ static ssize_t pseudo_write(struct file *file, const char __user *buf, size_t si
 	}
 
 	// Copy from user
-	if (copy_from_user(&pseudo_dev_data->buffer + (*offset), buf, size)) {
+	if (copy_from_user(pseudo_dev_data->buffer + (*offset), buf, size)) {
 		return -EFAULT;
 	};
 
@@ -307,7 +307,7 @@ static void __exit pseudo_exit(void)
 {
 	int i = 0;
 	for (i = 0; i < NO_OF_DEVICES; i++) {
-		device_destroy(pseudo_drv_data.pseudo_class, pseudo_drv_data.device_number + 1);
+		device_destroy(pseudo_drv_data.pseudo_class, pseudo_drv_data.device_number + i);
 		cdev_del(&pseudo_drv_data.pseudo_dev_data[i].pseudo_cdev);
 	}
 	class_destroy(pseudo_drv_data.pseudo_class);
