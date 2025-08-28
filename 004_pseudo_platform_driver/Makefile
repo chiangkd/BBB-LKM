@@ -1,5 +1,6 @@
 TARGET_MODULE := pseudo_device_setup
-obj-m := $(TARGET_MODULE).o
+TARGET_MODULE2 := pseudo_driver
+obj-m := $(TARGET_MODULE).o $(TARGET_MODULE2).o
 
 HEADER := 5.10.168-ti-r71
 
@@ -24,6 +25,7 @@ host:
 
 upload:
 	scp $(TARGET_MODULE).ko debian@192.168.7.2:/home/debian/drivers
+	scp $(TARGET_MODULE2).ko debian@192.168.7.2:/home/debian/drivers
 
 
 # Client part

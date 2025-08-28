@@ -45,7 +45,7 @@ static int __init pseudo_platform_init(void)
     platform_device_register(&platform_pseudo_dev_1);
     platform_device_register(&platform_pseudo_dev_2);
 
-    pr_info("Device setup module inserted\n");
+    pr_info("Device setup module loaded\n");
     return 0;
 }
 
@@ -54,7 +54,7 @@ static void __exit pseudo_platform_exit(void)
     platform_device_unregister(&platform_pseudo_dev_1);
     platform_device_unregister(&platform_pseudo_dev_2);
 
-    pr_info("Device set module removed\n");
+    pr_info("Device set module unloaded\n");
 }
 
 module_init(pseudo_platform_init);
