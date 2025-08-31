@@ -21,53 +21,24 @@ char pseudo_device_buf2[MEM_SIZE_DEV2];   // pseudo device
 char pseudo_device_buf3[MEM_SIZE_DEV3];   // pseudo device
 char pseudo_device_buf4[MEM_SIZE_DEV4];   // pseudo device
 
-// Device private data structure
-struct pseudo_dev_private_data {
-	char *buffer;
-	unsigned size;
-	const char *serial_number;
-	int perm;
-	struct cdev pseudo_cdev;
-};
-
 // Driver private data structure
 struct pseudo_drv_private_data {
 	int total_devices;
-	dev_t device_number;		// This holds the device number
-	struct device *pseudo_device;
+	dev_t device_number_base;
 	struct class *pseudo_class;
-	struct pseudo_dev_private_data pseudo_dev_data[NO_OF_DEVICES];
+	struct device *pseudo_device;
 };
 
-struct pseudo_drv_private_data pseudo_drv_data = {
-	.total_devices = NO_OF_DEVICES,
-	.pseudo_dev_data = {
-		[0] = {
-			.buffer = pseudo_device_buf1,
-			.size = MEM_SIZE_DEV1,
-			.serial_number = "PSEUDODEV1",
-			.perm = RDONLY	/* RDONLY */
-		},
-		[1] = {
-			.buffer = pseudo_device_buf2,
-			.size = MEM_SIZE_DEV2,
-			.serial_number = "PSEUDODEV2",
-			.perm = WRONLY	/* WRONLY */
-		},
-		[2] = {
-			.buffer = pseudo_device_buf3,
-			.size = MEM_SIZE_DEV3,
-			.serial_number = "PSEUDODEV3",
-			.perm = RDWR	/* RDWR */
-		},
-		[3] = {
-			.buffer = pseudo_device_buf4,
-			.size = MEM_SIZE_DEV4,
-			.serial_number = "PSEUDODEV4",
-			.perm = RDWR	/* RDWR */
-		},
-	}
+// Device private data structure
+struct pseudo_dev_private_data {
+	struct pseudo_drv_private_data pdata;
+	char *buffer;
+	dev_t dev_num;
+	struct cdev pseudo_cdev;
 };
+
+struct pseudo_drv_private_data pseudo_drv_data;
+
 
 #define PSEUDO_DEIVCE_NAME "pseudo"
 
@@ -152,7 +123,6 @@ int pseudo_platform_driver_probe(struct platform_device *pdev)
 }
 
 
-
 struct platform_driver pseudo_platform_driver = {
     .probe = pseudo_platform_driver_probe,
     .remove = pseudo_platform_driver_remove,
@@ -161,20 +131,45 @@ struct platform_driver pseudo_platform_driver = {
     }
 };
 
+#define MAX_DEVICES 10
 static int __init pseudo_platform_driver_init(void)
 {
-    // Register the driver
-    platform_driver_register(&pseudo_platform_driver);
-    pr_info("pseudo platform driver loaded\n");
+	int rc = 0;
+    /** 1. Dynamically allocate a device number for MAX_DEVICES */
+	rc = alloc_chrdev_region(&pseudo_drv_data.device_number_base, 0, MAX_DEVICES, PSEUDO_DEIVCE_NAME);
+	if (rc < 0) {
+		pr_err ("Alloc chrdev failed\n");
+		return rc;
+	}
+	
+	/** 2. Create device class under /sys/class */
+	pseudo_drv_data.pseudo_class = class_create(THIS_MODULE, PSEUDO_DEIVCE_NAME);
+	if (IS_ERR(pseudo_drv_data.pseudo_class)) {
+		pr_err("class_create fail\n");
+		rc = PTR_ERR(pseudo_drv_data.pseudo_class);
+		unregister_chrdev_region(pseudo_drv_data.device_number_base, MAX_DEVICES);
+		return rc;
+	}
 
+	/** 3. Register a platform driver */
+	platform_driver_register(&pseudo_platform_driver);
+	pr_info("pseudo platform driver loaded\n");
     return 0;
 }
 
-static void __exit pseudo_platform_driver_exit(void)
+static void __exit pseudo_platform_driver_cleanup(void)
 {
+	/** 1. Unregister the platform driver */
     platform_driver_unregister(&pseudo_platform_driver);
+
+	/** 2. Class destroy */
+	class_destroy(pseudo_drv_data.pseudo_class);
+	/** 3. Unregister device number for MAX_DEVICES */
+	unregister_chrdev_region(pseudo_drv_data.device_number_base, MAX_DEVICES);
+
+
     pr_info("pseudo platform driver unloaded\n");
 }
 
 module_init(pseudo_platform_driver_init);
-module_exit(pseudo_platform_driver_exit);
+module_exit(pseudo_platform_driver_cleanup);
