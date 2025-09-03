@@ -111,8 +111,19 @@ struct file_operations pseudo_fops = {
 
 
 // Gets called when the device is removed from the system
-int pseudo_platform_driver_remove(struct platform_device *pdef)
+int pseudo_platform_driver_remove(struct platform_device *pdev)
 {
+	struct pseudo_dev_private_data *device_data = dev_get_drvdata(&pdev->dev);
+	/** 1. Remove a device that was created with device_create() */
+	device_destroy(pseudo_drv_data.pseudo_class, device_data->dev_num);
+	/** 2. Remove a cdev entyry from the system */
+	cdev_del(&device_data->pseudo_cdev);
+	/** 3. Free the memory held by the device */
+	kfree(device_data->buffer);
+	kfree(device_data);
+
+	pseudo_drv_data.total_devices--;
+
     pr_info("A device is removed\n");
     return 0;
 }
@@ -125,6 +136,9 @@ int pseudo_platform_driver_probe(struct platform_device *pdev)
 
 	struct pseudo_dev_private_data *device_data;
 	struct pseudo_platform_data *pdata;
+
+	pr_info("A device is detected\n");
+
 	/** 1. Get the platform data */
 	pdata = (struct pseudo_platform_data *) dev_get_platdata(&pdev->dev);
 	if (!pdata) {
@@ -140,6 +154,9 @@ int pseudo_platform_driver_probe(struct platform_device *pdev)
 		goto out;
 	}
 
+	/** Save the device private data pointer in platform device structure */
+	dev_set_drvdata(&pdev->dev, device_data);
+
 	device_data->pdata.size = pdata->size;
 	device_data->pdata.perm = pdata->perm;
 	device_data->pdata.serial_number = pdata->serial_number;
@@ -150,19 +167,47 @@ int pseudo_platform_driver_probe(struct platform_device *pdev)
 
 	/** 3. Dynamically allocate memory for the device buffer using suze
 	 * information from the platform data */
-
+	device_data->buffer = kzalloc(device_data->pdata.size, GFP_KERNEL);
+	if (!device_data->buffer) {
+		pr_info("Cannot allocate memory\n");
+		rc = -ENOMEM;
+		goto dev_data_free;
+	}
 	/** 4. Get the devuce number */
+	device_data->dev_num = pseudo_drv_data.device_number_base + pdev->id;
 
 	/** 5. Do cdev init and cdev add */
+	cdev_init(&device_data->pseudo_cdev, &pseudo_fops);
+
+	device_data->pseudo_cdev.owner = THIS_MODULE;
+	rc = cdev_add(&device_data->pseudo_cdev, device_data->dev_num, 1);
+	if (rc < 0) {
+		pr_err("cdev_add fail\n");
+		goto buf_free;
+	}
 
 	/** 6. Create device file for the detected platform device */
+	pseudo_drv_data.pseudo_device = device_create(pseudo_drv_data.pseudo_class, NULL, device_data->dev_num, NULL, "%s%d", PSEUDO_DEIVCE_NAME, pdev->id);
+	if (IS_ERR(pseudo_drv_data.pseudo_device)) {
+		pr_err("device_create fail\n");
+		rc = PTR_ERR(pseudo_drv_data.pseudo_device);
+		goto cdev_del;
+	}
+
+	pseudo_drv_data.total_devices++;
+
+	pr_info("The probe was successful\n");
+
+    return 0;
 
 	/** 7. Error handling */
 
-	
-    pr_info("A device is detected\n");
-    return 0;
-
+cdev_del:
+	cdev_del(&device_data->pseudo_cdev);
+buf_free:
+	kfree(device_data->buffer);
+dev_data_free:
+	kfree(device_data);
 out:
 	pr_info("DEvice probe failed\n");
 	return rc;
