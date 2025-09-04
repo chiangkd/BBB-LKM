@@ -118,9 +118,6 @@ int pseudo_platform_driver_remove(struct platform_device *pdev)
 	device_destroy(pseudo_drv_data.pseudo_class, device_data->dev_num);
 	/** 2. Remove a cdev entyry from the system */
 	cdev_del(&device_data->pseudo_cdev);
-	/** 3. Free the memory held by the device */
-	kfree(device_data->buffer);
-	kfree(device_data);
 
 	pseudo_drv_data.total_devices--;
 
@@ -147,7 +144,7 @@ int pseudo_platform_driver_probe(struct platform_device *pdev)
 		goto out;
 	}
 	/** 2. Dynamically allocate memory for the device private data */
-	device_data = (struct pseudo_dev_private_data *) kzalloc(sizeof(struct pseudo_dev_private_data), GFP_KERNEL);
+	device_data = devm_kzalloc(&pdev->dev, sizeof(struct pseudo_dev_private_data), GFP_KERNEL);
 	if (!device_data) {
 		pr_info("Cannot allocate memory\n");
 		rc = -ENOMEM;
@@ -167,7 +164,7 @@ int pseudo_platform_driver_probe(struct platform_device *pdev)
 
 	/** 3. Dynamically allocate memory for the device buffer using suze
 	 * information from the platform data */
-	device_data->buffer = kzalloc(device_data->pdata.size, GFP_KERNEL);
+	device_data->buffer = devm_kzalloc(&pdev->dev, device_data->pdata.size, GFP_KERNEL);
 	if (!device_data->buffer) {
 		pr_info("Cannot allocate memory\n");
 		rc = -ENOMEM;
@@ -205,9 +202,9 @@ int pseudo_platform_driver_probe(struct platform_device *pdev)
 cdev_del:
 	cdev_del(&device_data->pseudo_cdev);
 buf_free:
-	kfree(device_data->buffer);
+	devm_kfree(&pdev->dev, device_data->buffer);
 dev_data_free:
-	kfree(device_data);
+	devm_kfree(&pdev->dev, device_data);
 out:
 	pr_info("DEvice probe failed\n");
 	return rc;
