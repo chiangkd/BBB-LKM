@@ -27,16 +27,5 @@ upload:
 	scp $(TARGET_MODULE).ko debian@192.168.7.2:/home/debian/drivers
 	scp $(TARGET_MODULE2).ko debian@192.168.7.2:/home/debian/drivers
 
-
-# Client part
-
-CC := arm-linux-gnueabihf-gcc
-TARGET_CLIENT := client
-client:
-	$(CC) -o $(TARGET_CLIENT) client.c
-
-upload-client:
-	scp $(TARGET_CLIENT).c debian@192.168.7.2:/home/debian/drivers
-
 clean-client:
 	rm -rf client
