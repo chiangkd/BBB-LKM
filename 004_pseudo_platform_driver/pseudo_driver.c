@@ -5,6 +5,7 @@
 #include <linux/kdev_t.h>
 #include <linux/platform_device.h>
 #include <linux/slab.h>
+#include <linux/mod_devicetable.h>
 
 #include "platform.h"
 
@@ -51,6 +52,33 @@ struct pseudo_drv_private_data pseudo_drv_data;
 #undef pr_fmt
 #define pr_fmt(fmt) "%s: " fmt, __func__
 #endif
+
+struct device_config {
+	int config_item1;
+	int config_item2;
+};
+
+enum pesudo_dev_names {
+	PSEUDO_DEV_A1X,
+	PSEUDO_DEV_B1X,
+	PSEUDO_DEV_C1X,
+	PSEUDO_DEV_D1X,
+};
+
+struct device_config pseudo_dev_config[] = {
+	[PSEUDO_DEV_A1X] = {.config_item1 = 60, .config_item2 = 10},
+	[PSEUDO_DEV_B1X] = {.config_item1 = 50, .config_item2 = 20},
+	[PSEUDO_DEV_C1X] = {.config_item1 = 40, .config_item2 = 30},
+	[PSEUDO_DEV_D1X] = {.config_item1 = 30, .config_item2 = 40},
+};
+
+struct platform_device_id pseudo_device_ids[] = {
+	[0] = {.name = "pseudo-dev-A1x", .driver_data = PSEUDO_DEV_A1X},
+	[1] = {.name = "pseudo-dev-B1x", .driver_data = PSEUDO_DEV_B1X},
+	[2] = {.name = "pseudo-dev-C1x", .driver_data = PSEUDO_DEV_C1X},
+	[2] = {.name = "pseudo-dev-D1x", .driver_data = PSEUDO_DEV_D1X},
+	{}	// Null terminated entry
+};
 
 int check_permission(int perm, int acc_mode)
 {
@@ -162,6 +190,11 @@ int pseudo_platform_driver_probe(struct platform_device *pdev)
 	pr_info("Device size = %d\n", pdata->size);
 	pr_info("Device permission = %d\n", pdata->perm);
 
+	// print driver data
+	pr_info("Config item1 = %d\n", pseudo_dev_config[pdev->id_entry->driver_data].config_item1);
+	pr_info("Config item1 = %d\n", pseudo_dev_config[pdev->id_entry->driver_data].config_item2);
+
+
 	/** 3. Dynamically allocate memory for the device buffer using suze
 	 * information from the platform data */
 	device_data->buffer = devm_kzalloc(&pdev->dev, device_data->pdata.size, GFP_KERNEL);
@@ -214,6 +247,7 @@ out:
 struct platform_driver pseudo_platform_driver = {
     .probe = pseudo_platform_driver_probe,
     .remove = pseudo_platform_driver_remove,
+	.id_table = pseudo_device_ids,
     .driver = {
         .name = "pseudo-char-device"
     }

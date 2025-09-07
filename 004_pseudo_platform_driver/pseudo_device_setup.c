@@ -22,9 +22,8 @@ struct pseudo_platform_data pseudo_pdata[] = {
     [3] = {.size = 32,  .perm = WRONLY, .serial_number = "PSEUDO_4"},
 };
 
-// Create 2 platform devices
 struct platform_device platform_pseudo_dev_1 = {
-    .name = "pseudo-char-device",
+    .name = "pseudo-dev-A1x",
     .id = 0,
     .dev = {
         .platform_data = &pseudo_pdata[0],
@@ -33,7 +32,7 @@ struct platform_device platform_pseudo_dev_1 = {
 };
 
 struct platform_device platform_pseudo_dev_2 = {
-    .name = "pseudo-char-device",
+    .name = "pseudo-dev-B1x",
     .id = 1,
     .dev = {
         .platform_data = &pseudo_pdata[1],
@@ -42,7 +41,7 @@ struct platform_device platform_pseudo_dev_2 = {
 };
 
 struct platform_device platform_pseudo_dev_3 = {
-    .name = "pseudo-char-device",
+    .name = "pseudo-dev-C1x",
     .id = 2,
     .dev = {
         .platform_data = &pseudo_pdata[2],
@@ -51,7 +50,7 @@ struct platform_device platform_pseudo_dev_3 = {
 };
 
 struct platform_device platform_pseudo_dev_4 = {
-    .name = "pseudo-char-device",
+    .name = "pseudo-dev-D1x",
     .id = 3,
     .dev = {
         .platform_data = &pseudo_pdata[3],
