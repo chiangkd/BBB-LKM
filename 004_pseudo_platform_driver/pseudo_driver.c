@@ -168,15 +168,13 @@ int pseudo_platform_driver_probe(struct platform_device *pdev)
 	pdata = (struct pseudo_platform_data *) dev_get_platdata(&pdev->dev);
 	if (!pdata) {
 		pr_info("No platform data available\n");
-		rc = -EINVAL;
-		goto out;
+		return -EINVAL;
 	}
 	/** 2. Dynamically allocate memory for the device private data */
 	device_data = devm_kzalloc(&pdev->dev, sizeof(struct pseudo_dev_private_data), GFP_KERNEL);
 	if (!device_data) {
 		pr_info("Cannot allocate memory\n");
-		rc = -ENOMEM;
-		goto out;
+		return -ENOMEM;
 	}
 
 	/** Save the device private data pointer in platform device structure */
@@ -194,14 +192,12 @@ int pseudo_platform_driver_probe(struct platform_device *pdev)
 	pr_info("Config item1 = %d\n", pseudo_dev_config[pdev->id_entry->driver_data].config_item1);
 	pr_info("Config item1 = %d\n", pseudo_dev_config[pdev->id_entry->driver_data].config_item2);
 
-
 	/** 3. Dynamically allocate memory for the device buffer using suze
 	 * information from the platform data */
 	device_data->buffer = devm_kzalloc(&pdev->dev, device_data->pdata.size, GFP_KERNEL);
 	if (!device_data->buffer) {
 		pr_info("Cannot allocate memory\n");
-		rc = -ENOMEM;
-		goto dev_data_free;
+		return -ENOMEM;
 	}
 	/** 4. Get the devuce number */
 	device_data->dev_num = pseudo_drv_data.device_number_base + pdev->id;
@@ -213,7 +209,7 @@ int pseudo_platform_driver_probe(struct platform_device *pdev)
 	rc = cdev_add(&device_data->pseudo_cdev, device_data->dev_num, 1);
 	if (rc < 0) {
 		pr_err("cdev_add fail\n");
-		goto buf_free;
+		return rc;
 	}
 
 	/** 6. Create device file for the detected platform device */
@@ -221,7 +217,8 @@ int pseudo_platform_driver_probe(struct platform_device *pdev)
 	if (IS_ERR(pseudo_drv_data.pseudo_device)) {
 		pr_err("device_create fail\n");
 		rc = PTR_ERR(pseudo_drv_data.pseudo_device);
-		goto cdev_del;
+		cdev_del(&device_data->pseudo_cdev);
+		return rc;
 	}
 
 	pseudo_drv_data.total_devices++;
@@ -229,18 +226,6 @@ int pseudo_platform_driver_probe(struct platform_device *pdev)
 	pr_info("The probe was successful\n");
 
     return 0;
-
-	/** 7. Error handling */
-
-cdev_del:
-	cdev_del(&device_data->pseudo_cdev);
-buf_free:
-	devm_kfree(&pdev->dev, device_data->buffer);
-dev_data_free:
-	devm_kfree(&pdev->dev, device_data);
-out:
-	pr_info("DEvice probe failed\n");
-	return rc;
 }
 
 
