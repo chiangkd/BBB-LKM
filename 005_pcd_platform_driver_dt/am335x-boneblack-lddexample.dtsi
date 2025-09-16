@@ -1,0 +1,31 @@
+/ {
+    soc {
+        platform-pseudo-device-1 {
+            compatible = "pseudo-dev-A1x";
+            org,size = <512>;
+            org,device-serial-number = "PSEUDO_1";
+            org,perm = <0x11>;                      // RDWR
+        };
+
+        platform-pseudo-device-2 {
+            compatible = "pseudo-dev-B1x";
+            org,size = <1024>;
+            org,device-serial-number = "PSEUDO_2";
+            org,perm = <0x11>;                      // RDWR
+        };
+
+        platform-pseudo-device-3 {
+            compatible = "pseudo-dev-C1x";
+            org,size = <128>;
+            org,device-serial-number = "PSEUDO_3";
+            org,perm = <0x01>;                      // RDONLY
+        };
+
+        platform-pseudo-device-4 {
+            compatible = "pseudo-dev-D1x";
+            org,size = <32>;
+            org,device-serial-number = "PSEUDO_4";
+            org,perm = <0x10>;                      // WRONLY
+        };
+    }
+};
