@@ -27,5 +27,5 @@
             org,device-serial-number = "PSEUDO_4";
             org,perm = <0x10>;                      // WRONLY
         };
-    }
+    };
 };
