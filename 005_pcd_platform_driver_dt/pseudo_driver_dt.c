@@ -203,39 +203,41 @@ int pseudo_platform_driver_probe(struct platform_device *pdev)
 	struct pseudo_dev_private_data *device_data;
 	struct pseudo_platform_data *pdata;
 	struct device *dev = &pdev->dev;
-	struct of_device_id *match;
 	int driver_data;
+
+	// Used to store matched entry of 'of_device_id' list of this driver
+	const struct of_device_id *match;
+
 	dev_info(dev, "A device is detected\n");
 
-	/** 1. Get the platform data */
+	// match will always be NULL if Linux does not support device tree. i.e. CONFIG_OF is off
+	match = of_match_device(of_match_ptr(pseudo_device_dt_match), dev);
 
+	if (match) {
+		pdata = pseudo_device_get_platdata_from_dt(dev);
 
-	pdata = pseudo_device_get_platdata_from_dt(dev);
-	if (IS_ERR(pdata)) {
-		return PTR_ERR(pdata);
-	}
-
-	if (!pdata) {
-		// If pdata is NULL, means device instantiation did not happen.
-		// Then, check device setup
-		pdata = (struct pseudo_platform_data *) dev_get_platdata(dev);
-		if (!pdata) {
-			pr_info("No platform data available from device setup\n");
-			return -EINVAL;
+		if (IS_ERR(pdata)) {
+			return PTR_ERR(pdata);
 		}
-
-		driver_data = pdev->id_entry->driver_data;
+		driver_data = (int) match->data;
 	} else {
-		// Extract driver data from device tree node
-		driver_data = (int) of_device_get_match_data(dev);
-		// match = of_match_device(pdev->dev.driver->of_match_table, &pdev->dev);
-		// driver_data = (int) match->data;
+		// If pdata is NULL, means device instantiation did not happen.
+		// Then, check device_setup (pseudo setup device code)
+		pdata = (struct pseudo_platform_data *) dev_get_platdata(dev);
+		driver_data = pdev->id_entry->driver_data;
 	}
+
+	/** 1. Get the platform data */
+	if (!pdata) {
+		dev_info(dev, "No platform data available from device setup\n");
+		return -EINVAL;
+	}
+
 
 	/** 2. Dynamically allocate memory for the device private data */
 	device_data = devm_kzalloc(&pdev->dev, sizeof(struct pseudo_dev_private_data), GFP_KERNEL);
 	if (!device_data) {
-		pr_info("Cannot allocate memory\n");
+		dev_info(dev, "Cannot allocate memory\n");
 		return -ENOMEM;
 	}
 
@@ -297,7 +299,7 @@ struct platform_driver pseudo_platform_driver = {
 	// .id_table = pseudo_device_ids,
     .driver = {
         .name = "pseudo-char-device",
-		.of_match_table = pseudo_device_dt_match
+		.of_match_table = of_match_ptr(pseudo_device_dt_match)
     }
 };
 
