@@ -7,7 +7,7 @@
 #include <linux/slab.h>
 #include <linux/mod_devicetable.h>
 #include <linux/of.h>
-
+#include <linux/of_device.h>
 #include "platform.h"
 
 #define NO_OF_DEVICES 4
@@ -158,10 +158,42 @@ int pseudo_platform_driver_remove(struct platform_device *pdev)
 
 	pseudo_drv_data.total_devices--;
 
-    pr_info("A device is removed\n");
+    dev_info(&pdev->dev, "A device is removed\n");
     return 0;
 }
 
+struct pseudo_platform_data *pseudo_device_get_platdata_from_dt(struct device *dev)
+{
+	struct device_node *dev_node = dev->of_node;
+	struct pseudo_platform_data *pdata;
+	if (!dev_node) {
+		/* This probe did not happen because of device tree node */
+		return NULL;
+	}
+
+	pdata = devm_kzalloc(dev, sizeof(struct pseudo_platform_data), GFP_KERNEL);
+	if (!pdata) {
+		dev_info(dev, "Cannot allocate memory\n");
+		return ERR_PTR(-ENOMEM);
+	}
+	
+	if (of_property_read_string(dev_node, "org,device-serial-number", &pdata->serial_number)) {
+		dev_info(dev, "Missing serial number property\n");
+		return ERR_PTR(-EINVAL);
+	}
+
+	if (of_property_read_u32(dev_node, "org,size", &pdata->size)) {
+		dev_info(dev, "Missing size property\n");
+		return ERR_PTR(-EINVAL);
+	}
+
+	if (of_property_read_u32(dev_node, "org,perm", &pdata->perm)) {
+		dev_info(dev, "Missing perm property\n");
+		return ERR_PTR(-EINVAL);
+	}
+
+	return pdata;
+}
 
 // Gets called when matched platform device is found
 int pseudo_platform_driver_probe(struct platform_device *pdev)
@@ -170,15 +202,36 @@ int pseudo_platform_driver_probe(struct platform_device *pdev)
 
 	struct pseudo_dev_private_data *device_data;
 	struct pseudo_platform_data *pdata;
-
-	pr_info("A device is detected\n");
+	struct device *dev = &pdev->dev;
+	struct of_device_id *match;
+	int driver_data;
+	dev_info(dev, "A device is detected\n");
 
 	/** 1. Get the platform data */
-	pdata = (struct pseudo_platform_data *) dev_get_platdata(&pdev->dev);
-	if (!pdata) {
-		pr_info("No platform data available\n");
-		return -EINVAL;
+
+
+	pdata = pseudo_device_get_platdata_from_dt(dev);
+	if (IS_ERR(pdata)) {
+		return PTR_ERR(pdata);
 	}
+
+	if (!pdata) {
+		// If pdata is NULL, means device instantiation did not happen.
+		// Then, check device setup
+		pdata = (struct pseudo_platform_data *) dev_get_platdata(dev);
+		if (!pdata) {
+			pr_info("No platform data available from device setup\n");
+			return -EINVAL;
+		}
+
+		driver_data = pdev->id_entry->driver_data;
+	} else {
+		// Extract driver data from device tree node
+		driver_data = (int) of_device_get_match_data(dev);
+		// match = of_match_device(pdev->dev.driver->of_match_table, &pdev->dev);
+		// driver_data = (int) match->data;
+	}
+
 	/** 2. Dynamically allocate memory for the device private data */
 	device_data = devm_kzalloc(&pdev->dev, sizeof(struct pseudo_dev_private_data), GFP_KERNEL);
 	if (!device_data) {
@@ -198,8 +251,8 @@ int pseudo_platform_driver_probe(struct platform_device *pdev)
 	pr_info("Device permission = %d\n", pdata->perm);
 
 	// print driver data
-	pr_info("Config item1 = %d\n", pseudo_dev_config[pdev->id_entry->driver_data].config_item1);
-	pr_info("Config item1 = %d\n", pseudo_dev_config[pdev->id_entry->driver_data].config_item2);
+	pr_info("Config item1 = %d\n", pseudo_dev_config[driver_data].config_item1);
+	pr_info("Config item1 = %d\n", pseudo_dev_config[driver_data].config_item2);
 
 	/** 3. Dynamically allocate memory for the device buffer using suze
 	 * information from the platform data */
@@ -208,8 +261,8 @@ int pseudo_platform_driver_probe(struct platform_device *pdev)
 		pr_info("Cannot allocate memory\n");
 		return -ENOMEM;
 	}
-	/** 4. Get the devuce number */
-	device_data->dev_num = pseudo_drv_data.device_number_base + pdev->id;
+	/** 4. Get the device number */
+	device_data->dev_num = pseudo_drv_data.device_number_base + pseudo_drv_data.total_devices;
 
 	/** 5. Do cdev init and cdev add */
 	cdev_init(&device_data->pseudo_cdev, &pseudo_fops);
@@ -222,7 +275,7 @@ int pseudo_platform_driver_probe(struct platform_device *pdev)
 	}
 
 	/** 6. Create device file for the detected platform device */
-	pseudo_drv_data.pseudo_device = device_create(pseudo_drv_data.pseudo_class, NULL, device_data->dev_num, NULL, "%s%d", PSEUDO_DEIVCE_NAME, pdev->id);
+	pseudo_drv_data.pseudo_device = device_create(pseudo_drv_data.pseudo_class, dev, device_data->dev_num, NULL, "%s%d", PSEUDO_DEIVCE_NAME, pseudo_drv_data.total_devices);
 	if (IS_ERR(pseudo_drv_data.pseudo_device)) {
 		pr_err("device_create fail\n");
 		rc = PTR_ERR(pseudo_drv_data.pseudo_device);
