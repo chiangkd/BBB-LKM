@@ -1,0 +1,26 @@
+/dts-v1/;
+/plugin/;
+
+/{
+    fragment@0 {
+        target-path = "/soc/platform-pseudo-device-1";
+        __overlay__ {
+            status = "disabled";
+        };
+    };
+
+    fragment@1 {
+        target-path = "/soc/platform-pseudo-device-2";
+        __overlay__ {
+            status = "disabled";
+        };
+    };
+
+    fragment@2 {
+        target-path = "/soc/platform-pseudo-device-3";
+        __overlay__ {
+            org,size = <128>;
+            org,device-serial-number = "PSEUDO_3_OVERLAY";
+        };
+    };
+};
