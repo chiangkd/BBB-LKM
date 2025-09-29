@@ -62,6 +62,66 @@ struct file_operations pseudo_fops = {
     .llseek = pseudo_lseek,
 };
 
+// Create 2 variables of struct device_attribute
+
+
+ssize_t max_size_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	return 0;
+}
+ssize_t serial_num_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	return 0;
+}
+ssize_t max_size_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
+{
+	return 0;
+}
+
+/**
+ * DEVICE_ATTR - Define a device attribute.
+ * @_name: Attribute name.
+ * @_mode: File mode.
+ * @_show: Show handler. Optional, but mandatory if attribute is readable.
+ * @_store: Store handler. Optional, but mandatory if attribute is writable.
+ *
+ * Convenience macro for defining a struct device_attribute.
+ *
+ * For example, ``DEVICE_ATTR(foo, 0644, foo_show, foo_store);`` expands to:
+ *
+ * .. code-block:: c
+ *
+ *	struct device_attribute dev_attr_foo = {
+ *		.attr	= { .name = "foo", .mode = 0644 },
+ *		.show	= foo_show,
+ *		.store	= foo_store,
+ *	};
+ */
+// #define DEVICE_ATTR(_name, _mode, _show, _store)
+// 	struct device_attribute dev_attr_##_name = __ATTR(_name, _mode, _show, _store)
+
+static DEVICE_ATTR(max_size, S_IRUGO | S_IWUSR, max_size_show, max_size_store);
+static DEVICE_ATTR(serial_num, S_IRUGO, serial_num_show,  NULL);
+
+int pseudo_sysfs_create_files(struct device *pseudo_dev)
+{
+	int rc;
+	// static inline int __must_check sysfs_create_file(struct kobject *kobj,
+	// 						 const struct attribute *attr)
+	// {
+	// 	return sysfs_create_file_ns(kobj, attr, NULL);
+	// }
+	rc = sysfs_create_file(&pseudo_dev->kobj, &dev_attr_max_size.attr);
+
+	if (rc) {
+		return rc;
+	}
+
+	rc = sysfs_create_file(&pseudo_dev->kobj, &dev_attr_serial_num.attr);
+
+	return rc;
+}
+
 
 // Gets called when the device is removed from the system
 int pseudo_platform_driver_remove(struct platform_device *pdev)
@@ -202,6 +262,12 @@ int pseudo_platform_driver_probe(struct platform_device *pdev)
 	}
 
 	pseudo_drv_data.total_devices++;
+
+	rc = pseudo_sysfs_create_files(pseudo_drv_data.pseudo_device);
+	if (rc) {
+		device_destroy(pseudo_drv_data.pseudo_class, device_data->dev_num);
+		return rc;
+	}
 
 	pr_info("The probe was successful\n");
 
