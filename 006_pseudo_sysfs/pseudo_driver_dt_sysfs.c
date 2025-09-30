@@ -65,17 +65,40 @@ struct file_operations pseudo_fops = {
 // Create 2 variables of struct device_attribute
 
 
-ssize_t max_size_show(struct device *dev, struct device_attribute *attr, char *buf)
+ssize_t show_max_size(struct device *dev, struct device_attribute *attr, char *buf)
 {
-	return 0;
+	// Get access to the device private data
+	struct pseudo_dev_private_data *dev_data = dev_get_drvdata(dev->parent);
+
+	return sprintf(buf, "%d\n", dev_data->pdata.size);
 }
-ssize_t serial_num_show(struct device *dev, struct device_attribute *attr, char *buf)
+
+ssize_t show_serial_num(struct device *dev, struct device_attribute *attr, char *buf)
 {
-	return 0;
+	// user space program (`read` or `cat`) try to read the attribute
+	// will invoke this function.
+
+	// Get access to the device private data
+	struct pseudo_dev_private_data *dev_data = dev_get_drvdata(dev->parent);
+
+	return sprintf(buf, "%s\n", dev_data->pdata.serial_number);
 }
-ssize_t max_size_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
+
+ssize_t store_max_size(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
 {
-	return 0;
+	long result;
+	int ret;
+	struct pseudo_dev_private_data *dev_data = dev_get_drvdata(dev->parent);
+
+	ret = kstrtol(buf, 10, &result);
+	if (ret) {
+		return ret;
+	}
+	dev_data->pdata.size = result;	// change the size information, need re-allocation
+
+	dev_data->buffer =  krealloc(dev_data->buffer, dev_data->pdata.size, GFP_KERNEL);
+
+	return count;
 }
 
 /**
@@ -100,26 +123,38 @@ ssize_t max_size_store(struct device *dev, struct device_attribute *attr, const 
 // #define DEVICE_ATTR(_name, _mode, _show, _store)
 // 	struct device_attribute dev_attr_##_name = __ATTR(_name, _mode, _show, _store)
 
-static DEVICE_ATTR(max_size, S_IRUGO | S_IWUSR, max_size_show, max_size_store);
-static DEVICE_ATTR(serial_num, S_IRUGO, serial_num_show,  NULL);
+static DEVICE_ATTR(max_size, S_IRUGO | S_IWUSR, show_max_size, store_max_size);
+static DEVICE_ATTR(serial_num, S_IRUGO, show_serial_num,  NULL);
+
+struct attribute *pseudo_attrs[] = {
+	&dev_attr_max_size.attr,
+	&dev_attr_serial_num.attr,
+	NULL
+};
+
+struct attribute_group pseudo_attr_group = {
+	.attrs = pseudo_attrs
+};
 
 int pseudo_sysfs_create_files(struct device *pseudo_dev)
 {
-	int rc;
+	// int rc;
 	// static inline int __must_check sysfs_create_file(struct kobject *kobj,
 	// 						 const struct attribute *attr)
 	// {
 	// 	return sysfs_create_file_ns(kobj, attr, NULL);
 	// }
-	rc = sysfs_create_file(&pseudo_dev->kobj, &dev_attr_max_size.attr);
+	// rc = sysfs_create_file(&pseudo_dev->kobj, &dev_attr_max_size.attr);
 
-	if (rc) {
-		return rc;
-	}
+	// if (rc) {
+	// 	return rc;
+	// }
 
-	rc = sysfs_create_file(&pseudo_dev->kobj, &dev_attr_serial_num.attr);
+	// rc = sysfs_create_file(&pseudo_dev->kobj, &dev_attr_serial_num.attr);
 
-	return rc;
+	// return rc;
+
+	return sysfs_create_group(&pseudo_dev->kobj, &pseudo_attr_group);
 }
 
 
